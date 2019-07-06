@@ -19,6 +19,9 @@ class Config:
     lam_recon = 0.1
     lam_fp = 1
     use_sp = True
+    K = 2
+    content_ch = 128
+    style_ch = 128
 
 
     beta1 = 0.5

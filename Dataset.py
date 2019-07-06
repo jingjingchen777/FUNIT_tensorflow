@@ -28,7 +28,7 @@ def transform(image, npx= 64 , is_crop=False, resize_w=64, is_test=False):
         cropped_image = image
         cropped_image = scipy.misc.imresize(cropped_image ,
                             [resize_w , resize_w])
-    return np.array(cropped_image)/127.5 - 1
+    return np.array(cropped_image) / 127.5 - 1
 
 def center_crop(x, crop_h , crop_w=None, resize_w=64, is_test=False):
 
@@ -90,13 +90,6 @@ def inverse_transform(image, is_ouput=False):
 
 log_interval = 1000
 
-head_angle_list = ['0P', '15P', '30P', '-15P', '-30P']
-head_angle_list_int = [0, 0.5, 1, -0.5, -1]
-v_eye_angle_list = ['0V', '10V', '-10V']
-v_eye_angle_list_int = [0, 1, -1]
-h_eye_angle_list = ['0H', '5H', '10H', '15H', '-5H', '-10H', '-15H']
-h_eye_angle_list_int = [0, 0.33, 0.66, 1, -0.33, -0.66, -1]
-
 class CUB_bird(object):
 
     def __init__(self, config):
@@ -106,7 +99,6 @@ class CUB_bird(object):
         self.height, self.width, self.channel = config.hwc
         self.batch_size = config.batch_size
         self.image_size = 256
-
 
         self.shape = [self.image_size, self.image_size, self.channel]
         self.images_dict = self.read_image_dict()
@@ -152,7 +144,6 @@ class CUB_bird(object):
 
 
             # using 1-170 for train , 170-200 for test
-
             id_domain = range(1, 170)
             id_x, id_y = random.sample(id_domain, 2)
             format_id_x = '%03d' % id_x  # source class
@@ -307,10 +298,10 @@ class CUB_bird(object):
 
 
     def getShapeForData(self, filenames, is_test=False):
-
         array = [get_image(batch_file, 108, is_crop=False, resize_w=256,
                            is_grayscale=False, is_test=is_test) for batch_file in filenames]
         sample_images = np.array(array)
+
         return sample_images
 
 

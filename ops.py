@@ -6,14 +6,13 @@ def log_sum_exp(x, axis=1):
     m = tf.reduce_max(x, keep_dims=True)
     return m + tf.log(tf.reduce_sum(tf.exp(x - m), axis=axis))
 
-#the implements of leakyRelu
 def lrelu(x, alpha=0.2, name="LeakyReLU"):
     with tf.variable_scope(name):
         return tf.maximum(x , alpha*x)
 
-def conv2d(input_, output_dim, kernel=4, stride=2, use_sp=False, padding='SAME', name="conv2d"):
+def conv2d(input_, output_dim, kernel=4, stride=2, use_sp=False, padding='SAME', scope="conv2d"):
 
-    with tf.variable_scope(name):
+    with tf.variable_scope(scope):
         w = tf.get_variable('w', [kernel, kernel, input_.get_shape()[-1], output_dim],
                             initializer=tf.random_normal_initializer(stddev=0.02))
         if use_sp != True:
@@ -30,11 +29,12 @@ def conv2d_innorm_relu(input_, output_dim, kernel, stride,
                        padding='SAME', name='conv2d_innorm_relu'):
     with tf.variable_scope(name):
         return tf.nn.relu(instance_norm(conv2d(input_, output_dim=output_dim,
-            kernel=kernel, stride=stride, padding=padding, name='conv2d'), scope='in_norm'))
+            kernel=kernel, stride=stride, padding=padding, scope='conv2d'), scope='in_norm'))
 
 def instance_norm(input, scope="instance_norm"):
 
     with tf.variable_scope(scope):
+
         depth = input.get_shape()[-1]
         scale = tf.get_variable("scale", [depth], initializer=tf.random_normal_initializer(1.0, 0.02, dtype=tf.float32))
         offset = tf.get_variable("offset", [depth], initializer=tf.constant_initializer(0.0))
@@ -45,20 +45,34 @@ def instance_norm(input, scope="instance_norm"):
 
         return scale * normalized + offset
 
-def adaptive_instance_norm(input,gamma,beta, scope="adaptive_instance_norm"):
+def Resblock(x_init, channels, scope='resblock'):
+    with tf.variable_scope(scope):
+        with tf.variable_scope('res1'):
+            x = conv2d(x_init, channels, kernel=3, stride=1, use_sp=False, padding='SAME')
+            x = instance_norm(x)
+            x = tf.nn.relu(x)
+        with tf.variable_scope('res2'):
+            x = conv2d(x, channels, kernel=3, stride=1, use_sp=False, padding='SAME')
+            x = instance_norm(x)
+        return x + x_init
+
+def Resblock_AdaIn(x_init, beta, gamma, channels, scope='resblock'):
+    with tf.variable_scope(scope):
+        with tf.variable_scope('res1'):
+            x = conv2d(x_init, channels, kernel=3, stride=1, use_sp=False, padding='SAME')
+            x = Adaptive_instance_norm(x, beta=beta, gamma=gamma, scope='AdaIn1')
+            x = tf.nn.relu(x)
+        with tf.variable_scope('res2'):
+            x = conv2d(x, channels, kernel=3, stride=1, use_sp=False, padding='SAME')
+            x = Adaptive_instance_norm(x, beta=beta, gamma=gamma, scope='AdaIn2')
+            x = x
+
+        return x + x_init
+
+def Adaptive_instance_norm(input, beta, gamma, scope="adaptive_instance_norm"):
 
     with tf.variable_scope(scope):
-        depth = input.get_shape()[-1]
-        #scale = tf.get_variable("scale", [depth], initializer=tf.random_normal_initializer(1.0, 0.02, dtype=tf.float32))
-        #offset = tf.get_variable("offset", [depth], initializer=tf.constant_initializer(0.0))
-        gamma = tf.transpose(tf.expand_dims(tf.expand_dims(tf.tile(gamma,[1,depth]),axis=-1),axis=-1),[0,2,3,1])
-        beta = tf.transpose(tf.expand_dims(tf.expand_dims(tf.tile(beta, [1, depth]), axis=-1), axis=-1), [0, 2, 3, 1])
-        print('gamma',gamma)
-        print('beta',beta)
-
         mean, variance = tf.nn.moments(input, axes=[1,2], keep_dims=True)
-        print('mean',mean)
-        print('variance',variance)
         epsilon = 1e-5
         inv = tf.rsqrt(variance + epsilon)
         normalized = (input - mean) * inv

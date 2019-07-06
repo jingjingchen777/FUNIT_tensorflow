@@ -1,6 +1,5 @@
 import tensorflow as tf
-from ops import conv2d,  instance_norm, adaptive_instance_norm,fully_connect,conv2d_innorm_relu,lrelu,upscale
-#from ops import gen_conv,gen_deconv,batchnorm # need change
+from ops import *
 from Dataset import save_images, replace_eyes
 import os
 import numpy as np
@@ -28,6 +27,7 @@ class FSUGAN(object):
 
         self.channel = data_ob.channel
         self.batch_size = config.batch_size
+
         # output directory
         self.write_model_path = config.write_model_path
         self.validate_evaluation_path = config.validate_evaluation_path
@@ -43,6 +43,8 @@ class FSUGAN(object):
         self.image_size = config.image_size
         self.K = 2
         self.num_source_class = config.num_source_class
+        self.content_ch = config.content_ch
+        self.style_ch = config.style_ch
 
         # placeholder defination
 
@@ -58,23 +60,19 @@ class FSUGAN(object):
         self.content_code = self.content_encoder(self.x, reuse=False)
         self.encode_y1 = self.class_encoder_k(self.y_1, reuse=False)
         self.encode_y2 = self.class_encoder_k(self.y_2, reuse=True)
-        self.class_code = tf.add(self.encode_y1,self.encode_y2)/2
+        self.class_code = tf.add(self.encode_y1, self.encode_y2) / 2
 
-        self.x_bar = self.decoder(content_code=self.content_code, class_code=self.class_code,reuse=False)
+        self.x_bar = self.decoder(content_code=self.content_code, class_code=self.class_code, reuse=False)
 
         self.encode_x = self.class_encoder_k(self.x,reuse=True)
         self.x_recon = self.decoder(content_code=self.content_code, class_code= self.encode_x,reuse=True)
-
 
         self.content_image_recon = tf.reduce_mean( tf.square(self.x - self.x_recon))
         self.x_bar_feature, _ = self.discriminator(self.x_bar,reuse=False)
         self.y_feature_1, _ = self.discriminator(self.y_1,reuse=True)
         self.y_feature_2, _ = self.discriminator(self.y_2, reuse= True)
         self.y_feature = tf.add(self.y_feature_1, self.y_feature_2) / 2
-        print(self.y_feature)
-        print('x_bar_feature',self.x_bar_feature)
-        print('y_1_feature',tf.reduce_mean(self.y_feature_1))
-        print('y_2_feature', tf.reduce_mean(self.y_feature_2))
+
         self.feature_matching = tf.reduce_mean(tf.square(self.y_feature - self.x_bar_feature))
 
 
@@ -90,10 +88,8 @@ class FSUGAN(object):
 
         self.G_loss = self.G_gan_loss + self.lam_recon*self.content_image_recon + self.lam_fp*self.feature_matching
 
-
         self.log_vars.append(('D_loss', self.D_gan_loss))
         self.log_vars.append(('G_loss', self.G_loss))
-
 
         self.vars = tf.trainable_variables()
 
@@ -115,11 +111,10 @@ class FSUGAN(object):
 
     def train(self):
 
-        opti_G = tf.train.AdamOptimizer(self.g_learning_rate * self.lr_decay,
-                                        beta1=self.beta1, beta2=self.beta2).minimize(loss=self.G_loss, var_list=self.encoder_vars + self.decoder_vars)
-
-        opti_D = tf.train.AdamOptimizer(self.d_learning_rate * self.lr_decay,
-                                        beta1=self.beta1, beta2=self.beta2).minimize(loss=self.D_gan_loss,var_list=self.d_vars)
+        opti_G = tf.train.RMSPropOptimizer(self.g_learning_rate * self.lr_decay).minimize(loss=self.G_loss,
+                                                                                          var_list=self.encoder_vars + self.decoder_vars)
+        opti_D = tf.train.RMSPropOptimizer(self.d_learning_rate * self.lr_decay).minimize(loss=self.D_gan_loss,
+                                                                                          var_list=self.d_vars)
 
         init = tf.global_variables_initializer()
         config = tf.ConfigProto()
@@ -268,189 +263,91 @@ class FSUGAN(object):
 
     def content_encoder(self, x, reuse=False):
 
+        channel = self.content_ch
         with tf.variable_scope("content_encoder") as scope:
 
             if reuse:
                 scope.reuse_variables()
 
-            x = conv2d(x, output_dim=64, kernel=1, stride=1, padding='SAME', name='conv-1')
+            x = conv2d(x, output_dim=64, kernel=7, stride=1, padding='SAME', scope='conv-1')
             x = instance_norm(x,scope='IN-1')
             x = tf.nn.relu(x)
 
-            x = conv2d(x, output_dim=128, kernel=1, stride=2, padding='SAME', name='conv-2')
-            x = instance_norm(x,scope='IN-2')
-            x = tf.nn.relu(x)
+            for i in range(3):
+                x = conv2d(x, output_dim=pow(2,i)*channel, kernel=4, stride=2, padding='SAME', scope='conv_{}'.format(i+1))
+                x = instance_norm(x,scope='ins_{}'.format(i+1))
+                x = tf.nn.relu(x)
 
-            x = conv2d(x, output_dim=256, kernel=1, stride=2, padding='SAME', name='conv-3')
-            x = instance_norm(x,scope='IN-3')
-            x = tf.nn.relu(x)
-
-            x = conv2d(x, output_dim=512, kernel=1, stride=2, padding='SAME', name='conv-4')
-            x = instance_norm(x,scope='IN-4')
-            x = tf.nn.relu(x)
-
-            x_shortcut = x
-
-            x = conv2d(x, output_dim=512, kernel=1, stride=1, padding='SAME', name='conv-5')
-            x = instance_norm(x,scope='IN-5')
-            x = tf.add(x, x_shortcut)
-            x = tf.nn.relu(x)
-
-            x_shortcut = x
-
-            x = conv2d(x,output_dim=512, kernel=1, stride=1, padding='SAME',name='conv-6')
-            x = instance_norm(x,scope='IN-6')
-            x = tf.add(x,x_shortcut)
-            x = tf.nn.relu(x)
+            for i in range(2):
+                x = Resblock(x, channels=512, scope='residual_{}'.format(i))
 
         return x
 
-    def class_encoder_k(self,y, reuse= True):
+    def class_encoder_k(self, y, reuse=False):
 
+        channel = self.style_ch
         with tf.variable_scope("class_encoder_k") as scope:
             if reuse:
                 scope.reuse_variables()
-            print(y)
 
-            y = conv2d(y,output_dim=64, kernel=1, stride=1, padding='SAME',name='conv-1')
-            y = tf.nn.relu(y)
+            y = conv2d(y,output_dim=64, kernel=7, stride=1, padding='SAME',scope='conv-1')
 
-            y = conv2d(y,output_dim=128, kernel=1, stride=2, padding='SAME',name='conv-2')
-            y = tf.nn.relu(y)
+            for i in range(4):
+                y = tf.nn.relu(y)
+                y = conv2d(y, output_dim=channel*pow(2,i), kernel=4, stride=2, padding='SAME',scope='conv_{}'.format(i+1))
 
-            y = conv2d(y,output_dim=256, kernel=1, stride=2, padding='SAME',name='conv-3')
-            y = tf.nn.relu(y)
-
-            y = conv2d(y,output_dim=512, kernel=1, stride=2, padding='SAME',name='conv-4')
-            y = tf.nn.relu(y)
-
-            y = conv2d(y,output_dim=1024, kernel=1, stride=2, padding='SAME',name='conv-5')
-            y = tf.nn.relu(y)
-
-            y = tf.nn.avg_pool(y,ksize=[1,2,2,1],strides=[1,2,2,1],padding='SAME')
-
-            y = tf.layers.flatten(y)
+            y = tf.reduce_mean(y, axis=[1,2])
 
         return y
 
-
-
-    def adain_resblk(self,x, stage, beta,gamma, reuse=False):
+    def Resblocks_AdaIn(self,x, stage, beta, gamma, reuse=False):
         conv_name_base = 'adain_resblk_' + str(stage)
         with tf.variable_scope(conv_name_base) as scope:
             if reuse:
                 scope.reuse_variables()
-
-            x_shortcut = x
-            print(x_shortcut)
-
-            x = conv2d(x,output_dim=512, kernel=1, stride=1 ,padding='VALID', name=conv_name_base + '2a')
-            x = adaptive_instance_norm(x,beta= beta, gamma=gamma)
-            x = tf.nn.relu(x)
-            print(x)
-
-
-            x = conv2d(x,output_dim=512,kernel=3,stride=1,padding='SAME',name=conv_name_base+'2b')
-            x = adaptive_instance_norm(x,beta=beta,gamma=gamma)
-            x = tf.nn.relu(x)
-            print(x)
-
-            x = conv2d(x,output_dim=512,kernel=1,stride=1,padding='VALID',name=conv_name_base+'2c')
-
-            x_shortcut = conv2d(x_shortcut,output_dim=512,kernel=1,stride=1,padding='VALID',name = conv_name_base + '1')
-
-            print(x, x_shortcut)
-            x = tf.add(x,x_shortcut)
-            x = tf.nn.relu(x)
+            x = Resblock_AdaIn(x, beta, gamma, channels=256, scope='R_AdaIn1')
+            x = Resblock_AdaIn(x, beta, gamma, channels=256, scope='R_AdaIn2')
 
         return x
 
+    def decoder(self, content_code, class_code, reuse =True):
 
-
-    def decoder(self,content_code, class_code, reuse =True):
-
+        channel = 256
         with tf.variable_scope("decoder") as scope:
             if reuse:
                 scope.reuse_variables()
 
-            x = fully_connect(input_=class_code,output_size=256,scope='FC-256-1')
-            x = fully_connect(input_=x, output_size=256, scope='FC-256-2')
-            x = fully_connect(input_=x, output_size=256, scope='FC-256-3')
-            #print(x)
-            x = tf.layers.flatten(x,name='faltten')
-            #print(x)
-            #x = tf.reshape(x,[-1,1,1,512])
-            mean, variance = tf.nn.moments(x, axes=1, keep_dims=True)
-            #print('mean',mean)
-            #print('variance', variance)
+            for i in range(4):
+                if i == 3:
+                    class_code = fully_connect(input_=class_code, output_size=512*4, scope='fc_{}'.format(i+1))
+                else:
+                    class_code = fully_connect(input_=class_code, output_size=256, scope='fc_{}'.format(i+1))
 
+            mean1 = class_code[:,0:512]
+            stand_dev1 = class_code[:,512:512*2]
+            mean2 = class_code[:,512*2:512*3]
+            stand_dev2 = class_code[:,512*3:512*4]
 
-            y = self.adain_resblk(content_code, stage=1,beta=mean,gamma=variance)
-            y = self.adain_resblk(y,  stage=2 ,beta=mean,gamma=variance)
-            print(y)
+            de = self.Resblocks_AdaIn(content_code, stage=1, beta=mean1, gamma=stand_dev1)
+            de = self.Resblocks_AdaIn(de,  stage=2 ,beta=mean2,  gamma=stand_dev2)
 
-            y = upscale(y,scale=2)
-            y = conv2d_innorm_relu(input_=y,output_dim=256,kernel=4, stride=1,padding='SAME',name='conv_innorm_relu-256-1')
-            print(y)
+            for i in range(3):
+                de = conv2d(de, output_dim=channel/pow(2,i), kernel=4, stride=2, padding='SAME', scope='conv_{}'.format(i+1))
+                de = instance_norm(de,scope='ins_{}'.format(i+1))
+                de = tf.nn.relu(de)
 
-            y = upscale(y,scale=2)
-            y = conv2d_innorm_relu(input_=y, output_dim=128,kernel=4,stride=1, padding='SAME', name='conv_innorm_relu-128-2')
-            print(y)
+            y = conv2d(de, output_dim=3, kernel=7, stride=1, padding='SAME', scope='conv_{}'.format(i))
 
-            y = upscale(y,scale=2)
-            y = conv2d_innorm_relu(input_=y, output_dim=64, kernel=4,stride=1, padding='SAME', name='conv_innorm_relu-64-3')
-            print(y)
-
-            y = upscale(y,scale=1)
-            y = conv2d_innorm_relu(input_=y, output_dim=3,kernel=4, stride=1,padding='SAME',name='conv_innorm_relu_3-4')
-            print(y)
-
-        return y
-
-
-    def res_block(self,x, filters, stage, reuse =False):
-        conv_name_base = 'resblk_' + str(stage)
-        F1, F2, F3 = filters
-        with tf.variable_scope(conv_name_base) as scope:
-            if reuse:
-                scope.reuse_variables()
-
-            x_shortcut = x
-            print(x_shortcut)
-
-            x = conv2d(input_=x,output_dim=F1, kernel=3, stride=1, padding='SAME', name=conv_name_base + 'a')
-            x = lrelu(x,alpha=0.2)
-            print(x)
-
-            x = conv2d(input_= x, output_dim= F2, kernel=3, stride=1, padding='SAME', name=conv_name_base + 'b')
-            x = lrelu(x,alpha=0.2)
-            print(x)
-
-            x = conv2d(input_= x, output_dim= F3, kernel=3, stride=1, padding='SAME', name=conv_name_base + 'c')
-            x = lrelu(x,alpha=0.2)
-            print(x)
-
-            x_shortcut = conv2d(input_=x_shortcut, output_dim=F3, kernel=3 , stride=1, padding='SAME', name=conv_name_base + '1')
-            print(x_shortcut)
-
-            x = tf.add(x,x_shortcut)
-            x = lrelu(x)
-
-
-        return x
-
+            return tf.nn.tanh(y)
 
     def discriminator(self,x, reuse =True):
         with tf.variable_scope("discriminator") as scope:
             if reuse:
                 scope.reuse_variables()
 
-
             x = conv2d(input_=x, output_dim=64, kernel=4, stride=2, name='conv-64')
-
             x = self.res_block(x, filters=[64, 64, 128], stage=1)
             x = self.res_block(x, filters=[128, 128, 128],stage=2)
-
 
             x = tf.nn.avg_pool(x, ksize=[1, 2, 2, 1], strides=[1, 2, 2 ,1],padding='SAME')
             print(x)
