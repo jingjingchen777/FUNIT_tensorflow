@@ -26,10 +26,23 @@ def conv2d(input_, output_dim, kernel=4, stride=2, use_sp=False, padding='SAME',
         return conv
 
 def conv2d_innorm_relu(input_, output_dim, kernel, stride,
-                       padding='SAME', name='conv2d_innorm_relu'):
-    with tf.variable_scope(name):
-        return tf.nn.relu(instance_norm(conv2d(input_, output_dim=output_dim,
-            kernel=kernel, stride=stride, padding=padding, scope='conv2d'), scope='in_norm'))
+                       padding='SAME', is_norm=False, is_acti=True, scope='conv2d_innorm_relu'):
+    with tf.variable_scope(scope):
+        if is_norm:
+            if is_acti:
+                return tf.nn.relu(instance_norm(conv2d(input_, output_dim=output_dim,
+                    kernel=kernel, stride=stride, padding=padding, scope='conv2d'), scope='in_norm'))
+            else:
+                return instance_norm(conv2d(input_, output_dim=output_dim,
+                    kernel=kernel, stride=stride, padding=padding, scope='conv2d'), scope='in_norm')
+        else:
+            if is_acti:
+                return tf.nn.relu(conv2d(input_, output_dim=output_dim,
+                    kernel=kernel, stride=stride, padding=padding, scope='conv2d'))
+            else:
+                return conv2d(input_, output_dim=output_dim,
+                          kernel=kernel, stride=stride, padding=padding, scope='conv2d')
+
 
 def instance_norm(input, scope="instance_norm"):
 
@@ -45,16 +58,24 @@ def instance_norm(input, scope="instance_norm"):
 
         return scale * normalized + offset
 
-def Resblock(x_init, channels, scope='resblock'):
+def Resblock(x_init, channels, is_acti=False, is_norm=False, is_start=False, scope='resblock'):
+
     with tf.variable_scope(scope):
-        with tf.variable_scope('res1'):
-            x = conv2d(x_init, channels, kernel=3, stride=1, use_sp=False, padding='SAME')
-            x = instance_norm(x)
-            x = tf.nn.relu(x)
-        with tf.variable_scope('res2'):
-            x = conv2d(x, channels, kernel=3, stride=1, use_sp=False, padding='SAME')
-            x = instance_norm(x)
-        return x + x_init
+
+        def shortcut(x_init):
+            x = conv2d(x_init, output_dim=channels, kernel=1, stride=1, scope='conv')
+            return x
+
+        x = conv2d_innorm_relu(x_init, output_dim=channels, kernel=3, stride=1, is_norm=is_norm, padding='SAME', scope='cir1')
+        x = conv2d_innorm_relu(x, output_dim=channels, kernel=3, stride=1, is_norm=is_norm, is_acti=False, padding='SAME', scope='cir2')
+
+        if is_start:
+            x_init = shortcut(x_init)
+
+        if is_acti:
+            return tf.nn.relu(x + x_init)
+        else:
+            return x + x_init
 
 def Resblock_AdaIn(x_init, beta, gamma, channels, scope='resblock'):
     with tf.variable_scope(scope):
@@ -76,6 +97,9 @@ def Adaptive_instance_norm(input, beta, gamma, scope="adaptive_instance_norm"):
         epsilon = 1e-5
         inv = tf.rsqrt(variance + epsilon)
         normalized = (input - mean) * inv
+
+        beta = tf.reshape(beta, shape=[-1, 1, 1, 512])
+        gamma = tf.reshape(gamma, shape=[-1, 1, 1, 512])
 
         return gamma * normalized + beta
 

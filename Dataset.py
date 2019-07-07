@@ -103,7 +103,6 @@ class CUB_bird(object):
         self.shape = [self.image_size, self.image_size, self.channel]
         self.images_dict = self.read_image_dict()
 
-
     def read_image_dict(self):
 
         #fh = open(self.data_dir + "/eye_position_2.txt")
@@ -126,51 +125,34 @@ class CUB_bird(object):
         #print(images_dict)
         #print(len(images_dict))# 200
         return images_dict
-    def check_channel(self,path):
-        image = imread(path=path)
-        image = np.asarray(image)
-        if image.shape[-1] == 3:
-            return True
-        else:
-            return False
 
     def getNextBatch(self):
 
         source_image_x = []
         target_image_y1 = []
         target_image_y2 = []
+        x_cls = []
 
         for i in range(self.batch_size):
-
 
             # using 1-170 for train , 170-200 for test
             id_domain = range(1, 170)
             id_x, id_y = random.sample(id_domain, 2)
+            x_cls.append(id_x)
             format_id_x = '%03d' % id_x  # source class
             format_id_y = '%03d' % id_y  # target class
-
-
-            source_image_name = random.sample(self.images_dict[format_id_x],1)[0]
-            the_path = os.path.join(self.data_dir,source_image_name)
-
-            while not self.check_channel(the_path):
-                source_image_name = random.sample(self.images_dict[id], 1)
-                the_path = os.path.join(self.data_dir, source_image_name)
-
+            #print self.images_dict[format_id_x]
+            source_image_name = random.sample(self.images_dict[format_id_x], 1)[0]
+            the_path = os.path.join(self.data_dir, source_image_name)
             source_image_x.append(the_path)
-
-            target_image_name_1,target_image_name_2 = random.sample(self.images_dict[format_id_y],2)
+            target_image_name_1, target_image_name_2 = random.sample(self.images_dict[format_id_y],2)
             the_path_1 = os.path.join(self.data_dir,target_image_name_1)
             the_path_2 = os.path.join(self.data_dir, target_image_name_2)
-            while not self.check_channel(the_path_1) or not self.check_channel(the_path_2):
-                target_image_name_1, target_image_name_2 = random.sample(self.images_dict[format_id_y], 2)
-                the_path_1 = os.path.join(self.data_dir, target_image_name_1)
-                the_path_2 = os.path.join(self.data_dir, target_image_name_2)
             target_image_y1.append(the_path_1)
             target_image_y2.append(the_path_2)
 
-
-        return np.asarray(source_image_x),np.asarray(target_image_y1),np.asarray(target_image_y2)
+        return np.asarray(source_image_x), np.asarray(target_image_y1), \
+                    np.asarray(target_image_y2), np.asanyarray(x_cls)
 
     def getTestData(self):
 

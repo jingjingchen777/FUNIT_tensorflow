@@ -15,9 +15,10 @@ class Config:
     num_source_class = 170
 
     # hyper
-    batch_size = 4
+    batch_size = 2
     lam_recon = 0.1
     lam_fp = 1
+    lam_gp = 10
     use_sp = True
     K = 2
     content_ch = 128
@@ -34,7 +35,7 @@ class Config:
 
     @property
     def data_dir(self):
-        data_dir = '/mnt/sata/syz/cjj/DataSetProcess/CUB_200_2011/croped_images/'
+        data_dir = '/mnt/sata/jichao/dataset/CUB_200_2011/croped_images'
         if not os.path.exists(data_dir):
             raise ValueError('Please specify a data dir.')
         return data_dir
