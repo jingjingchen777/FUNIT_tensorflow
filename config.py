@@ -2,32 +2,28 @@ import os
 
 class Config:
 
-    operation_name = "t"
+    operation_name = "7_7_4"
 
     is_training = True # no use
-    gpu_id = 7
-    image_size = 256
+    gpu_id = 5
+    image_size = 128
     hwc = [image_size, image_size, 3]
     max_iters = 500000
     g_learning_rate = 0.0001
     d_learning_rate = 0.0001
 
     num_source_class = 170
-
     # hyper
-    batch_size = 2
+    batch_size = 4
     lam_recon = 0.1
     lam_fp = 1
-    lam_gp = 10
+    lam_gp = 1
     use_sp = True
-    K = 2
     content_ch = 128
     style_ch = 128
 
-
     beta1 = 0.5
     beta2 = 0.999
-
 
     @property
     def base_path(self):

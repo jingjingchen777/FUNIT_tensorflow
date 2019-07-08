@@ -98,7 +98,7 @@ class CUB_bird(object):
         self.data_dir = config.data_dir
         self.height, self.width, self.channel = config.hwc
         self.batch_size = config.batch_size
-        self.image_size = 256
+        self.image_size = config.image_size
 
         self.shape = [self.image_size, self.image_size, self.channel]
         self.images_dict = self.read_image_dict()
@@ -132,6 +132,7 @@ class CUB_bird(object):
         target_image_y1 = []
         target_image_y2 = []
         x_cls = []
+        y_cls = []
 
         for i in range(self.batch_size):
 
@@ -139,6 +140,7 @@ class CUB_bird(object):
             id_domain = range(1, 170)
             id_x, id_y = random.sample(id_domain, 2)
             x_cls.append(id_x)
+            y_cls.append(id_y)
             format_id_x = '%03d' % id_x  # source class
             format_id_y = '%03d' % id_y  # target class
             #print self.images_dict[format_id_x]
@@ -152,166 +154,14 @@ class CUB_bird(object):
             target_image_y2.append(the_path_2)
 
         return np.asarray(source_image_x), np.asarray(target_image_y1), \
-                    np.asarray(target_image_y2), np.asanyarray(x_cls)
-
-    def getTestData(self):
-
-        image_list1 = []
-        image_list_pair1 = []
-        image_eye_pos1 = []
-        image_eye_pos_pair1 = []
-
-        image_list2 = []
-        image_list_pair2 = []
-        image_eye_pos2 = []
-        image_eye_pos_pair2 = []
-
-        f = open('test_name.txt')
-
-        #assert len(f)
-
-        for i in range(self.batch_size * self.test_batch_num):
-            # for f in f.readlines():
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list1.append(test_img_name)
-            image_eye_pos1.append(test_img_info)
-
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list2.append(test_img_name)
-            image_eye_pos2.append(test_img_info)
-
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list_pair1.append(test_img_name)
-            image_eye_pos_pair1.append(test_img_info)
-
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list_pair2.append(test_img_name)
-            image_eye_pos_pair2.append(test_img_info)
-
-        return np.array(image_list1), np.array(image_eye_pos1), np.array(image_list_pair1), \
-               np.array(image_eye_pos_pair1), np.array(image_list2), np.array(image_eye_pos2), \
-               np.array(image_list_pair2), np.array(image_eye_pos_pair2)
-
-
-    def getTestBatch(self,step):
-        start = step * self.batch_size
-        end = (step+1) * self.batch_size
-        return self.test_image_list1[start:end],self.test_image_eye_pos1[start:end],\
-                self.test_image_list1_pair[start:end],self.test_image_eye_pos1_pair[start:end],\
-                self.test_image_list2[start:end],self.test_image_eye_pos2[start:end],\
-                self.test_image_list2_pair[start:end],self.test_image_eye_pos2_pair[start:end]
-
-    def getValidateBatch(self):
-
-        image_list1 = []
-        image_list_pair1 = []
-        image_eye_pos1 = []
-        image_eye_pos_pair1 = []
-
-        image_list2 = []
-        image_list_pair2 = []
-        image_eye_pos2 = []
-        image_eye_pos_pair2 = []
-
-        f = open('test_batch_name.txt')
-
-        for i in range(self.batch_size):
-            # for f in f.readlines():
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list1.append(test_img_name)
-            image_eye_pos1.append(test_img_info)
-
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list2.append(test_img_name)
-            image_eye_pos2.append(test_img_info)
-
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list_pair1.append(test_img_name)
-            image_eye_pos_pair1.append(test_img_info)
-
-            line = f.readline()
-            line = line.strip('\n')
-            info = line.split('@')
-            test_img_name = info[0]
-            test_img_info = info[1].strip('[').strip(']').split(',')
-            test_img_info = [int(x) for x in test_img_info]
-            image_list_pair2.append(test_img_name)
-            image_eye_pos_pair2.append(test_img_info)
-
-        return np.array(image_list1), np.array(image_eye_pos1), np.array(image_list_pair1), \
-               np.array(image_eye_pos_pair1), np.array(image_list2), np.array(image_eye_pos2), \
-               np.array(image_list_pair2), np.array(image_eye_pos_pair2)
-
-
+                    np.asarray(target_image_y2), np.asarray(x_cls), np.asarray(y_cls)
 
     def getShapeForData(self, filenames, is_test=False):
-        array = [get_image(batch_file, 108, is_crop=False, resize_w=256,
+        array = [get_image(batch_file, 108, is_crop=False, resize_w=self.image_size,
                            is_grayscale=False, is_test=is_test) for batch_file in filenames]
         sample_images = np.array(array)
 
         return sample_images
-
-
-
-def replace_eyes(image, local_left_eyes, local_right_eyes, start_left_point, start_right_point):
-
-    copy_image = np.copy(image)
-    for i in range(len(image)):
-
-        #for left
-        y_cen, x_cen = int(start_left_point[i][0]*256), np.abs(int(start_left_point[i][1]*256))
-        local_height, local_width = int(local_left_eyes[i].shape[0]), int(local_left_eyes[i].shape[1])
-        copy_image[i, y_cen:(y_cen + local_height), x_cen:(x_cen + local_width), :] = local_left_eyes[i]
-        #for right
-        y_cen, x_cen = int(start_right_point[i][0]*256), int(start_right_point[i][1]*256)
-        local_height, local_width = int(local_right_eyes[i].shape[0]), int(local_right_eyes[i].shape[1])
-
-        #print "local_width", local_width, local_height, x_cen, y_cen, i
-        if x_cen + local_width > 256:
-            y_right = 256
-        else:
-            y_right = x_cen + local_width
-            # local_right_eyes[i] = Image.res(local_right_eyes[i], newshape=(local_height, new_width, 3))
-
-        # resize_replace = np.transpose(resize_replace, axes=(1, 0, 2))
-        copy_image[i, y_cen:(y_cen + local_height), x_cen:y_right, :] = local_right_eyes[i, :, 0:y_right-x_cen, :]
-
-    return copy_image
 
 
 def save_as_gif(images_list, out_path, gif_file_name='all', save_image=False):
