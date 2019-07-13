@@ -121,7 +121,6 @@ class CUB_bird(object):
                 images_dict[image_folder_num] .append(image_folder+'/'+imagename)
 
         fh.close()
-
         #print(images_dict)
         #print(len(images_dict))# 200
         return images_dict
@@ -137,7 +136,7 @@ class CUB_bird(object):
         for i in range(self.batch_size):
 
             # using 1-170 for train , 170-200 for test
-            id_domain = range(1, 170)
+            id_domain = range(1, 171)
             id_x, id_y = random.sample(id_domain, 2)
             x_cls.append(id_x)
             y_cls.append(id_y)
@@ -147,7 +146,7 @@ class CUB_bird(object):
             source_image_name = random.sample(self.images_dict[format_id_x], 1)[0]
             the_path = os.path.join(self.data_dir, source_image_name)
             source_image_x.append(the_path)
-            target_image_name_1, target_image_name_2 = random.sample(self.images_dict[format_id_y],2)
+            target_image_name_1, target_image_name_2 = random.sample(self.images_dict[format_id_y], 2)
             the_path_1 = os.path.join(self.data_dir,target_image_name_1)
             the_path_2 = os.path.join(self.data_dir, target_image_name_2)
             target_image_y1.append(the_path_1)
@@ -178,11 +177,4 @@ def save_as_gif(images_list, out_path, gif_file_name='all', save_image=False):
     out_path_and_name = os.path.join(out_path, '{}.gif'.format(gif_file_name))
     imageio.mimsave(out_path_and_name, images_list, 'GIF', duration=0.1)
 
-config = Config()
-os.environ['CUDA_VISIBLE_DEVICES']= str(config.gpu_id)
 
-if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES']='13'
-    d_ob = CUB_bird(config)
-    x,y_1,y_2 = d_ob.getNextBatch()
-    print(x,y_1,y_2)

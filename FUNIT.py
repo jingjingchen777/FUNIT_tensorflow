@@ -15,6 +15,7 @@ class FSUGAN(object):
         self.lam_recon = config.lam_recon
         self.lam_fp = config.lam_fp
         self.lam_gp = config.lam_gp
+        self.loss_type = config.loss_type
         self.beta1 = config.beta1
         self.beta2 = config.beta2
 
@@ -41,7 +42,6 @@ class FSUGAN(object):
 
         # FSU
         self.image_size = config.image_size
-        self.K = 1
         self.num_source_class = config.num_source_class
         self.content_ch = config.content_ch
         self.style_ch = config.style_ch
@@ -50,8 +50,8 @@ class FSUGAN(object):
         self.x = tf.placeholder(tf.float32,[self.batch_size,self.image_size,self.image_size,3])
         self.y_1 = tf.placeholder(tf.float32,[self.batch_size,self.image_size,self.image_size,3])
         self.y_2 = tf.placeholder(tf.float32, [self.batch_size, self.image_size, self.image_size, 3])
-        self.cls_x = tf.placeholder(tf.int32, [self.batch_size, 1])
-        self.cls_y = tf.placeholder(tf.int32, [self.batch_size, 1])
+        self.cls_x = tf.placeholder(tf.int32, [self.batch_size])
+        self.cls_y = tf.placeholder(tf.int32, [self.batch_size])
 
     def build_model(self):
 
@@ -76,17 +76,39 @@ class FSUGAN(object):
 
         self.feature_matching = tf.reduce_mean(tf.abs(self.y_feature - self.tilde_x_feature))
 
-        _, self.D_real = self.discriminator(self.x, reuse=True)
+        _, self.D_real_x = self.discriminator(self.x, reuse=True)
+        _, self.D_real_y = self.discriminator(self.y_1, reuse=True)
         #self.D_real = tf.reduce_mean(self.D_real, axis=[1,2,3])
         _, self.D_fake = self.discriminator(self.tilde_x, reuse=True)
 
-        self.cls_x_reshape = tf.reshape(tf.one_hot(self.cls_x, depth=self.num_source_class), shape=[-1, 1, 1, self.num_source_class])
-        self.cls_y_reshape = tf.reshape(tf.one_hot(self.cls_y, depth=self.num_source_class), shape=[-1, 1, 1, self.num_source_class])
+        self.cls_x_reshape = tf.reshape(tf.one_hot(self.cls_x, depth=self.num_source_class), shape=[self.batch_size, 1, 1, self.num_source_class])
+        self.cls_x_reshape = tf.tile(self.cls_x_reshape, multiples=[1, 8, 8, 1])
+        self.cls_y_reshape = tf.reshape(tf.one_hot(self.cls_y, depth=self.num_source_class), shape=[self.batch_size, 1, 1, self.num_source_class])
+        self.cls_y_reshape = tf.tile(self.cls_y_reshape, multiples=[1, 8, 8, 1])
 
-        self.D_gan_loss = self.loss_hinge_dis(self.D_real, self.D_fake, self.cls_x_reshape, self.cls_y_reshape)
-        self.G_gan_loss = self.loss_hinge_gen(self.D_fake, self.cls_y_reshape)
+        if self.loss_type == 0:
+            self.D_gan_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=self.D_real_x, labels=self.cls_x_reshape)) \
+                            - tf.reduce_mean(tf.reduce_sum(tf.log(1 - self.cls_y_reshape * tf.nn.softmax(self.D_fake) + 1e-7), axis=3))
+            self.G_gan_loss = tf.reduce_mean(tf.reduce_sum(tf.log(1 - self.cls_y_reshape * tf.nn.softmax(self.D_fake) + 1e-7), axis=3))
+            self.grad_penalty = self.gradient_penalty_just_real(x=self.x)
 
-        self.grad_penalty = self.gradient_penalty_just_real(x=self.x)
+        elif self.loss_type == 1:
+            self.D_gan_loss = self.loss_hinge_dis(self.D_real_x, self.D_fake, self.cls_x_reshape, self.cls_y_reshape)
+            self.G_gan_loss = self.loss_hinge_gen(self.D_fake, self.cls_y_reshape)
+            self.grad_penalty = self.gradient_penalty_just_real(x=self.x)
+
+        elif self.loss_type == 2:
+            self.D_gan_loss = tf.reduce_mean(tf.reduce_sum(- tf.log(self.cls_x_reshape * tf.sigmoid(self.D_real_x) + 1e-7), axis=3)) \
+                            + tf.reduce_mean(tf.reduce_sum(tf.log(1 - self.cls_y_reshape * tf.nn.sigmoid(self.D_fake) + 1e-7), axis=3))
+            self.G_gan_loss = - tf.reduce_mean(tf.reduce_sum(tf.log(1 - self.cls_y_reshape * tf.nn.sigmoid(self.D_fake) + 1e-7), axis=3))
+            self.grad_penalty = self.gradient_penalty_just_real(x=self.x)
+
+        else:
+            self.D_gan_loss = self.loss_hinge_dis(self.D_real_y, self.D_fake, self.cls_y_reshape, self.cls_y_reshape)
+            self.G_gan_loss = self.loss_hinge_gen(self.D_fake, self.cls_y_reshape)
+            self.grad_penalty = self.gradient_penalty_just_real(x=self.y_1)
+
+
 
         self.D_loss = self.D_gan_loss + self.lam_gp * self.grad_penalty
         self.G_loss = self.G_gan_loss + self.lam_recon * self.content_recon_loss + self.lam_fp * self.feature_matching
@@ -118,7 +140,6 @@ class FSUGAN(object):
                                                                                           var_list=self.encoder_vars + self.decoder_vars)
         opti_D = tf.train.RMSPropOptimizer(self.d_learning_rate * self.lr_decay).minimize(loss=self.D_loss,
                                                                                           var_list=self.d_vars)
-
         init = tf.global_variables_initializer()
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -148,18 +169,15 @@ class FSUGAN(object):
                     lr_decay = (self.max_iters - step) / float(self.max_iters - 20000)
 
                 source_image_x_data, target_image_y1_data, target_image_y2_data, cls_x, cls_y = self.data_ob.getNextBatch()
-
                 source_image_x = self.data_ob.getShapeForData(source_image_x_data)
                 target_image_y1 = self.data_ob.getShapeForData(target_image_y1_data)
-                target_image_y2 = self.data_ob.getShapeForData(target_image_y2_data)
 
-                cls_x = np.reshape(cls_x, newshape=[-1, 1])
-                cls_y = np.reshape(cls_y, newshape=[-1, 1])
+                # cls_x = np.reshape(cls_x, newshape=[-1, 1])
+                # cls_y = np.reshape(cls_y, newshape=[-1, 1])
 
                 f_d = {
                     self.x :source_image_x,
                     self.y_1:target_image_y1,
-                    self.y_2 : target_image_y2,
                     self.cls_x: cls_x,
                     self.cls_y: cls_y,
                     self.lr_decay: lr_decay
@@ -184,19 +202,17 @@ class FSUGAN(object):
 
                     f_d = {
                         self.x: source_image_x,
-                        self.y_1: target_image_y1,
-                        self.y_2: target_image_y2,
+                        self.y_1: target_image_y1
                     }
 
                     train_output_img = sess.run([
                         self.x,
                         self.y_1,
-                        self.y_2,
                         self.tilde_x,
                         self.x_recon
                     ],feed_dict=f_d)
 
-                    output_img = np.concatenate([train_output_img[0],train_output_img[1],train_output_img[2],train_output_img[3],train_output_img[4]],axis=0)
+                    output_img = np.concatenate([train_output_img[0], train_output_img[1], train_output_img[2], train_output_img[3]],axis=0)
 
                     save_images(output_img, [output_img.shape[0]/self.batch_size, self.batch_size],
                                 '{}/{:02d}_output_img.jpg'.format(self.sample_path, step))
@@ -227,13 +243,13 @@ class FSUGAN(object):
     #hinge loss
     #Hinge Loss + sigmoid
     def loss_hinge_dis(self, d_real_logits, d_fake_logits, cls_x, cls_y):
-        loss = tf.reduce_mean(tf.reduce_sum(cls_x * (tf.nn.relu(1.0 - d_real_logits)), axis=3), axis=[0,1,2])
-        loss += tf.reduce_mean(tf.reduce_sum(cls_y * (tf.nn.relu(1.0 + d_fake_logits)), axis=3), axis=[0,1,2])
+        loss = tf.reduce_mean(tf.reduce_sum(cls_x * (tf.nn.relu(1.0 - d_real_logits)), axis=3))
+        loss += tf.reduce_mean(tf.reduce_sum(cls_y * (tf.nn.relu(1.0 + d_fake_logits)), axis=3))
 
         return loss
 
     def loss_hinge_gen(self, d_fake_logits, cls_x):
-        loss = - tf.reduce_mean(tf.reduce_sum(cls_x * d_fake_logits, axis=3), axis=[0,1,2])
+        loss = - tf.reduce_mean(tf.reduce_sum(cls_x * d_fake_logits, axis=3))
         return loss
 
     #wgan loss
@@ -298,12 +314,12 @@ class FSUGAN(object):
             if reuse:
                 scope.reuse_variables()
 
-            y = conv2d(y,output_dim=64, kernel=7, stride=1, padding='SAME',scope='conv-1')
+            y = conv2d(y, output_dim=64, kernel=7, stride=1, padding='SAME',scope='conv-1')
             for i in range(4):
                 y = tf.nn.relu(y)
                 y = conv2d(y, output_dim=channel * pow(2,i), kernel=4, stride=2, padding='SAME',scope='conv_{}'.format(i+1))
-
             y = tf.reduce_mean(y, axis=[1,2])
+            y = fully_connect(input_=y, output_size=64, scope='fc_final')
 
         return y
 
@@ -346,19 +362,18 @@ class FSUGAN(object):
                 scope.reuse_variables()
 
             x = lrelu(conv2d(input_=x, output_dim=64, kernel=7, stride=1, scope='conv-64'))
-
             for i in range(5):
-                x = Resblock_D(x, channels=channel * pow(2, i), is_acti=True, is_start=True, is_norm=False,
-                             scope='r1_{}'.format(i + 1))
+                # x = Resblock_D(x, channels=min(channel * pow(2, i), 1024), is_acti=True, is_start=True, is_norm=False,
+                #              scope='r1_{}'.format(i + 1))
                 if i == 4:
-                    x = Resblock_D(x, channels=channel*pow(2,i), is_acti=False, is_start=False, is_norm=False, scope='r2_{}'.format(i+1))
+                    x = Resblock_D(x, channels=min(channel * pow(2, i), 1024), is_acti=False, is_start=False, is_norm=False, scope='r2_{}'.format(i+1))
                 else:
-                    x = Resblock_D(x, channels=channel*pow(2,i), is_acti=True, is_start=False, is_norm=False, scope='r2_{}'.format(i+1))
+                    x = Resblock_D(x, channels=min(channel * pow(2, i), 1024), is_acti=True, is_start=True, is_norm=False, scope='r2_{}'.format(i+1))
                     x = avgpool2d(x, k=2)
 
-            x_predict = conv2d(x, output_dim=self.num_source_class, kernel=1, stride=1, padding='SAME')
+            x_predict = conv2d(x, output_dim=self.num_source_class, kernel=3, stride=1, padding='SAME')
 
-        return x, x_predict
+        return x, tf.squeeze(x_predict)
 
 
 

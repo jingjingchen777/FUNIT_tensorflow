@@ -145,7 +145,6 @@ def Adaptive_instance_norm(input, beta, gamma, scope="adaptive_instance_norm"):
 
         return gamma * normalized + beta
 
-
 def de_conv(input_, output_shape,
              k_h=4, k_w=4, d_h=2, d_w=2, stddev=0.02, use_sp=False,
              name="deconv2d", with_w=False):

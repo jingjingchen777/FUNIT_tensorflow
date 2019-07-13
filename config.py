@@ -2,17 +2,19 @@ import os
 
 class Config:
 
-    operation_name = "7_7_4"
+    operation_name = "7_7_9"
 
     is_training = True # no use
-    gpu_id = 5
+    gpu_id = 0
     image_size = 128
     hwc = [image_size, image_size, 3]
     max_iters = 500000
     g_learning_rate = 0.0001
     d_learning_rate = 0.0001
+    loss_type = 3
 
     num_source_class = 170
+
     # hyper
     batch_size = 4
     lam_recon = 0.1
@@ -82,6 +84,7 @@ class Config:
         if not os.path.exists(sample_path):
             os.makedirs(sample_path)
         return sample_path
+
     @property
     def test_evaluation_path(self):
         sample_path = os.path.join(self.exp_dir,'test_evaluation_result')
